@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>The Matrix Rain</title>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+    <style type="text/css">
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: black;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            margin: auto;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+        }
+    </style>
+    <script type="text/javascript">
+        let cvs = document.getElementById('canvas');
+        let ctx = cvs.getContext('2d');
+
+        cvs.width = window.innerWidth;
+        cvs.height = window.innerHeight;
+
+        const columns = 64;
+        const fntSize = Math.ceil(cvs.width / columns);
+        const charPosY = Array(columns).fill(0);
+        const fntFamily = `bold ${fntSize}px arial`;
+
+        const katakana = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+        const latin = 'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ';
+        const num = '０１２３４５６７８９';
+
+        const charSet = (katakana + latin.repeat(2) + num.repeat(3)).split('');
+
+        const theme = () => {
+            let title = 'The Matrix';
+            let author = '- Archi'
+            let size = fntSize * 10;
+            let hw = cvs.width / 2, hh = cvs.height / 2;
+            let ox = title.length * size / 4, oy = size / 4;
+
+            ctx.fillStyle = '#D1F2EB';
+            ctx.font = `${size}px san-serif`;
+            ctx.fillText(title, hw - ox, hh + oy);
+
+            ctx.fillStyle = '#D1F2EB';
+            ctx.font = `${fntSize}px san-serif`;
+            ctx.fillText(author, hw + (ox / 1.4), hh + (oy * 1.6));
+        };
+        theme();
+
+        const draw = () => {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#20C20E';
+            ctx.font = fntFamily;
+
+            const charSetNum = charSet.length;
+            const random = Math.random;
+            const floor = Math.floor;
+
+            for (let i = 0, len = charPosY.length; i < len; ++i) {
+                let char = charSet[floor(random() * charSetNum)];
+                let x = i * fntSize, y = charPosY[i] * fntSize;
+                if (y >= 0) {
+                    ctx.fillText(char, x, y);
+                }
+                if (y >= canvas.height) {
+                    charPosY[i] = -1 * floor(random() * 32);
+                }
+                charPosY[i] += 1;
+            }
+        };
+
+        const fps = 32;
+        setInterval(draw, Math.floor(1 / fps * 1000));
+    </script>
+</body>
