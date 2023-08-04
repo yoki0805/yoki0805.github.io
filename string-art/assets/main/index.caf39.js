@@ -1,0 +1,20 @@
+System.register("chunks:///main.js",["cc"],(function(){"use strict";var t,e,i,n,r,o,a,l,u,c,s;return{setters:[function(p){t=p.cclegacy,e=p.dynamicAtlasManager,i=p._decorator,n=p.Graphics,r=p.Label,o=p.v2,a=p.lerp,l=p.color,u=p.tween,c=p.UIOpacity,s=p.Component}],execute:function(){function p(t,e){return(p=Object.setPrototypeOf?Object.setPrototypeOf.bind():function(t,e){return t.__proto__=e,t})(t,e)}function f(t){if(void 0===t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return t}function b(t,e,i,n){i&&Object.defineProperty(t,e,{enumerable:i.enumerable,configurable:i.configurable,writable:i.writable,value:i.initializer?i.initializer.call(n):void 0})}function d(t,e,i,n,r){var o={};return Object.keys(n).forEach((function(t){o[t]=n[t]})),o.enumerable=!!o.enumerable,o.configurable=!!o.configurable,("value"in o||o.initializer)&&(o.writable=!0),o=i.slice().reverse().reduce((function(i,n){return n(t,e,i)||i}),o),r&&void 0!==o.initializer&&(o.value=o.initializer?o.initializer.call(r):void 0,o.initializer=void 0),void 0===o.initializer&&(Object.defineProperty(t,e,o),o=null),o}var v,h,y,g,m,x,z,P,w,I;t._RF.push({},"b61b6pJsu1F4r6Q5J7oIKAn","Spider",void 0),e.enabled=!1;var O=i.ccclass,j=i.property;v=O("Spider"),h=j(n),y=j(r),v((x=d((m=function(t){var e,i;function n(){for(var e,i=arguments.length,n=new Array(i),r=0;r<i;r++)n[r]=arguments[r];return b(e=t.call.apply(t,[this].concat(n))||this,"pen",x,f(e)),b(e,"text",z,f(e)),b(e,"radius",P,f(e)),b(e,"pinNum",w,f(e)),b(e,"pinList",I,f(e)),e.lstPinPos=[],e.pinSequence=[],e.pinIndex=0,e}i=t,(e=n).prototype=Object.create(i.prototype),e.prototype.constructor=e,p(e,i);var r=n.prototype;return r.start=function(){for(var t=this,e=2*Math.PI,i=this.lstPinPos,n=this.radius,r=0,c=this.pinNum;r<c;++r)i.push(o(n,0).rotate(-a(0,e,r/c)));this.pinList.split(",").forEach((function(e){var i=parseInt(e);t.pinSequence.push(i)}));var s=this.pen;s.arc(0,0,this.radius,0,2*Math.PI,!1),s.fill();var p=s.strokeColor.clone();s.lineWidth*=10,s.strokeColor=l(p.r,p.g,p.b,255),s.arc(0,0,this.radius,0,2*Math.PI,!1),s.stroke(),s.strokeColor=p,s.lineWidth*=.1,u(this.node).delay(1).call((function(){return t.playStringArt()})).start()},r.playStringArt=function(){var t=this,e=u(this.node);e.by(1e8,{},{onUpdate:function(){for(var i=0;i<4;++i){var n=t.pen,r=t.pinIndex,o=t.pinSequence,a=t.lstPinPos;if(r+1===o.length){var l=function(){var i=t.text.node.getComponent(c);return t.text.string="  100%",u(i).delay(1).to(1,{opacity:0}).call((function(){i.opacity=255,t.text.string=""})).delay(.5).call((function(){var e="江戸前エルフ".split("");u(t.text).delay(.25).call((function(){t.text.string+=e.shift()})).union().repeat(e.length).delay(.25).call((function(){t.text.string+="    ",t.text.node.getChildByName("Icon").active=!0})).start()})).start(),e.stop(),{v:void 0}}();if("object"==typeof l)return l.v}var s=a[o[r]],p=a[o[r+1]];t.pinIndex+=1,n.moveTo(s.x,s.y),n.lineTo(p.x,p.y),n.stroke();var f=(r+1)/o.length*100;t.text.string="  "+f.toFixed(0)+"%"}}}).start()},n}(s)).prototype,"pen",[h],{configurable:!0,enumerable:!0,writable:!0,initializer:function(){return null}}),z=d(m.prototype,"text",[y],{configurable:!0,enumerable:!0,writable:!0,initializer:function(){return null}}),P=d(m.prototype,"radius",[j],{configurable:!0,enumerable:!0,writable:!0,initializer:function(){return 300}}),w=d(m.prototype,"pinNum",[j],{configurable:!0,enumerable:!0,writable:!0,initializer:function(){return 288}}),I=d(m.prototype,"pinList",[j],{configurable:!0,enumerable:!0,writable:!0,initializer:function(){return""}}),g=m));t._RF.pop()}}}));
+
+(function(r) {
+  r('virtual:///prerequisite-imports/main', 'chunks:///main.js'); 
+})(function(mid, cid) {
+    System.register(mid, [cid], function (_export, _context) {
+    return {
+        setters: [function(_m) {
+            var _exportObj = {};
+
+            for (var _key in _m) {
+              if (_key !== "default" && _key !== "__esModule") _exportObj[_key] = _m[_key];
+            }
+      
+            _export(_exportObj);
+        }],
+        execute: function () { }
+    };
+    });
+});
