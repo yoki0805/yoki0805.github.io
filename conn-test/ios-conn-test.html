@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主機連線測試</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1c2228; --muted: #67717b;
+    --border: #dce0e5; --accent: #2f6fde; --accent-text: #ffffff;
+    --ok: #1d8049; --bad: #c4382c; --warn: #a86e12; --row: #f9fafb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121417; --card: #1b1e22; --text: #e5e8eb; --muted: #9aa3ad;
+      --border: #2d3238; --accent: #6b9bff; --accent-text: #0e1116;
+      --ok: #4cc38a; --bad: #ff6e61; --warn: #e3ab4d; --row: #202429;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 4px 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p.lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, textarea, select {
+    width: 100%; font: inherit; font-size: 14px; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  }
+  textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  button {
+    font: inherit; font-size: 15px; border-radius: 8px; padding: 10px 16px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .status { margin-top: 10px; font-size: 14px; color: var(--muted); min-height: 1.5em; }
+  .device { font-size: 13px; color: var(--muted); word-break: break-all; }
+  .device b { color: var(--text); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:nth-child(even) td { background: var(--row); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>主機連線測試</h1>
+  <p class="lead">同時對多台主機反覆發請求，記錄每次等到回應的時間與是否逾時，用來比對 iOS 26 連 GCS 直連主機（wbgame）時會不會卡住。</p>
+
+  <section>
+    <h2>測試資訊</h2>
+    <div class="grid">
+      <div><label for="tester">測試者</label><input id="tester" placeholder="例：chuyenchen"></div>
+      <div><label for="osver">實際 iOS／系統版本</label><input id="osver" placeholder="設定 → 一般 → 關於本機"></div>
+      <div><label for="browser">瀏覽器／模式</label><input id="browser" placeholder="例：Safari 無痕"></div>
+      <div><label for="network">網路</label><input id="network" placeholder="例：公司 Wi-Fi"></div>
+    </div>
+    <div class="device" id="device"></div>
+  </section>
+
+  <section>
+    <h2>測試設定</h2>
+    <div class="grid">
+      <div><label for="rounds">輪數</label><input id="rounds" type="number" min="1" value="10"></div>
+      <div><label for="interval">每輪間隔（秒）</label><input id="interval" type="number" min="0" value="3"></div>
+      <div><label for="timeout">逾時（秒）</label><input id="timeout" type="number" min="1" value="20"></div>
+      <div><label for="slow">視為「慢」（秒）</label><input id="slow" type="number" min="1" value="5"></div>
+    </div>
+    <label for="targets">測試對象（每行「名稱 | 網址」，# 開頭為註解；同名稱的網址會一起統計）</label>
+    <textarea id="targets" rows="8"></textarea>
+    <p class="hint">每一輪會同時對所有網址發請求（模擬遊戲頁一打開就同時抓 CSS 與 JS）。網址會自動加上防快取參數。只量「多久收到回應」，伺服器回 403、404 也算有回應。</p>
+    <div class="buttons">
+      <button class="primary" id="start">開始測試</button>
+      <button id="stop" disabled>停止</button>
+    </div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section>
+    <h2>統計</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>名稱</th><th>請求數</th><th>逾時</th><th>錯誤</th><th>慢</th><th>中位數</th><th>P90</th><th>最長</th></tr></thead>
+        <tbody id="summary"><tr><td colspan="8" class="hint">尚未開始</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>每次請求明細</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>輪</th><th>時間</th><th>名稱</th><th>結果</th><th>耗時</th><th>網址</th></tr></thead>
+        <tbody id="detail"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>匯出結果</h2>
+    <div class="buttons" style="margin-top:0">
+      <button id="copy">複製文字結果</button>
+      <button id="csv">下載 CSV</button>
+    </div>
+    <textarea id="export" rows="10" readonly style="margin-top:10px" placeholder="測試完成後會出現在這裡，可長按全選複製"></textarea>
+  </section>
+</main>
+
+<script>
+const DEFAULT_TARGETS = [
+  'test-wbgame | https://test-wbgame.jlfafafa3.com/fish3/style.02f4a.css',
+  'test-wbgame | https://test-wbgame.jlfafafa3.com/favicon.ico',
+  'test-wbgame | https://test-wbgame.jlfafafa3.com/aeon/3.8/web-mobile/assets/versions.json',
+  'uat-wbgame | https://uat-wbgame.jlfafafa3.com/fish3/index.html',
+  'test-wbslot-fd | https://test-wbslot-fd.jlfafafa1.com/',
+  '# GCS 原生網址：填入 bucket 與檔案後移除開頭的 #',
+  '# gcs-native | https://storage.googleapis.com/<bucket>/<檔案>'
+].join('\n');
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+let running = false;
+let results = [];
+let startedAt = null;
+
+$('targets').value = DEFAULT_TARGETS;
+for (const key of ['rounds', 'interval', 'timeout', 'slow', 'tester', 'osver', 'browser', 'network']) {
+  if (params.has(key)) $(key).value = params.get(key);
+}
+
+function deviceInfo() {
+  const ua = navigator.userAgent;
+  const os = (ua.match(/OS (\d+)_(\d+)(?:_(\d+))?/) || []).slice(1).filter(Boolean).join('.');
+  const safari = (ua.match(/Version\/([\d.]+)/) || [])[1] || '';
+  return { ua, os, safari };
+}
+function renderDevice() {
+  const d = deviceInfo();
+  let html = '';
+  if (d.os) html += `UA 中的 iOS：<b>${d.os}</b>　`;
+  if (d.safari) html += `Safari 版本：<b>${d.safari}</b>　`;
+  if (d.os && d.safari && parseInt(d.safari) >= 26 && parseInt(d.os) < 26) {
+    html += '<br>（iOS 26 的 Safari 會把 UA 裡的系統版本固定顯示成 18.x，實際版本請到「關於本機」確認並填在上方）';
+  }
+  html += `<br>UA：${d.ua}`;
+  $('device').innerHTML = html;
+}
+renderDevice();
+
+function parseTargets() {
+  return $('targets').value.split('\n').map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .map((line) => {
+      const parts = line.split('|').map((s) => s.trim());
+      const url = parts.length > 1 ? parts.slice(1).join('|') : parts[0];
+      let name = parts.length > 1 ? parts[0] : '';
+      if (!name) { try { name = new URL(url).host; } catch (e) { name = url; } }
+      return { name, url };
+    });
+}
+
+function bust(url) {
+  return url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now() + Math.random().toString(36).slice(2, 8);
+}
+
+async function probe(target, timeoutMs) {
+  const url = bust(target.url);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const t0 = performance.now();
+  try {
+    await fetch(url, { mode: 'no-cors', cache: 'no-store', credentials: 'include', signal: ctrl.signal });
+    return { result: 'ok', ms: Math.round(performance.now() - t0) };
+  } catch (e) {
+    const ms = Math.round(performance.now() - t0);
+    return { result: e.name === 'AbortError' ? 'timeout' : 'error', ms, err: e.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function timeStr(d) {
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function resultLabel(r, slowMs) {
+  if (r.result === 'timeout') return ['逾時', 'bad'];
+  if (r.result === 'error') return ['錯誤', 'bad'];
+  if (r.ms >= slowMs) return ['慢', 'warn'];
+  return ['正常', 'ok'];
+}
+
+function addDetailRow(r, slowMs) {
+  const [label, cls] = resultLabel(r, slowMs);
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="num">${r.round}</td><td>${r.time}</td><td>${escapeHtml(r.name)}</td>` +
+    `<td class="${cls}">${label}</td><td class="num">${r.ms.toLocaleString()} ms</td>` +
+    `<td>${escapeHtml(r.url)}</td>`;
+  $('detail').prepend(tr);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  const idx = Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1);
+  return sorted[Math.max(0, idx)];
+}
+
+function summarize(slowMs) {
+  const byName = new Map();
+  for (const r of results) {
+    if (!byName.has(r.name)) byName.set(r.name, []);
+    byName.get(r.name).push(r);
+  }
+  return [...byName.entries()].map(([name, rs]) => {
+    const okMs = rs.filter((r) => r.result === 'ok').map((r) => r.ms).sort((a, b) => a - b);
+    return {
+      name,
+      n: rs.length,
+      timeout: rs.filter((r) => r.result === 'timeout').length,
+      error: rs.filter((r) => r.result === 'error').length,
+      slow: rs.filter((r) => r.result === 'ok' && r.ms >= slowMs).length,
+      p50: percentile(okMs, 0.5),
+      p90: percentile(okMs, 0.9),
+      max: okMs.length ? okMs[okMs.length - 1] : null,
+    };
+  });
+}
+
+const fmtMs = (v) => (v == null ? '—' : v.toLocaleString() + ' ms');
+
+function renderSummary(slowMs) {
+  const rows = summarize(slowMs);
+  $('summary').innerHTML = rows.map((s) =>
+    `<tr><td>${escapeHtml(s.name)}</td><td class="num">${s.n}</td>` +
+    `<td class="num ${s.timeout ? 'bad' : ''}">${s.timeout}</td>` +
+    `<td class="num ${s.error ? 'bad' : ''}">${s.error}</td>` +
+    `<td class="num ${s.slow ? 'warn' : ''}">${s.slow}</td>` +
+    `<td class="num">${fmtMs(s.p50)}</td><td class="num">${fmtMs(s.p90)}</td><td class="num">${fmtMs(s.max)}</td></tr>`
+  ).join('') || '<tr><td colspan="8" class="hint">沒有資料</td></tr>';
+}
+
+function buildExport(slowMs, timeoutMs) {
+  const d = deviceInfo();
+  const lines = [];
+  lines.push('# 主機連線測試結果');
+  lines.push(`- 開始時間：${startedAt ? startedAt.toLocaleString() : ''}`);
+  lines.push(`- 測試者：${$('tester').value || '（未填）'}`);
+  lines.push(`- 實際系統版本：${$('osver').value || '（未填）'}`);
+  lines.push(`- 瀏覽器／模式：${$('browser').value || '（未填）'}`);
+  lines.push(`- 網路：${$('network').value || '（未填）'}`);
+  lines.push(`- UA：${d.ua}`);
+  lines.push(`- 設定：逾時 ${timeoutMs / 1000} 秒，慢 ≥ ${slowMs / 1000} 秒，每輪間隔 ${$('interval').value} 秒`);
+  lines.push('');
+  lines.push('| 名稱 | 請求數 | 逾時 | 錯誤 | 慢 | 中位數 | P90 | 最長 |');
+  lines.push('|---|---:|---:|---:|---:|---:|---:|---:|');
+  for (const s of summarize(slowMs)) {
+    lines.push(`| ${s.name} | ${s.n} | ${s.timeout} | ${s.error} | ${s.slow} | ${fmtMs(s.p50)} | ${fmtMs(s.p90)} | ${fmtMs(s.max)} |`);
+  }
+  lines.push('');
+  lines.push('## 明細');
+  lines.push('| 輪 | 時間 | 名稱 | 結果 | 耗時 |');
+  lines.push('|---:|---|---|---|---:|');
+  for (const r of results) {
+    lines.push(`| ${r.round} | ${r.time} | ${r.name} | ${resultLabel(r, slowMs)[0]} | ${r.ms} ms |`);
+  }
+  return lines.join('\n');
+}
+
+function buildCsv(slowMs) {
+  const head = ['round', 'time', 'name', 'result', 'ms', 'url', 'error'];
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const rows = results.map((r) => [r.round, r.time, r.name, resultLabel(r, slowMs)[0], r.ms, r.url, r.err || ''].map(q).join(','));
+  return '﻿' + [head.join(','), ...rows].join('\n');
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function run() {
+  const targets = parseTargets();
+  if (!targets.length) { $('status').textContent = '請至少填一個測試對象'; return; }
+  const rounds = Math.max(1, parseInt($('rounds').value) || 1);
+  const intervalMs = Math.max(0, parseFloat($('interval').value) || 0) * 1000;
+  const timeoutMs = Math.max(1, parseFloat($('timeout').value) || 20) * 1000;
+  const slowMs = Math.max(1, parseFloat($('slow').value) || 5) * 1000;
+
+  running = true;
+  results = [];
+  startedAt = new Date();
+  $('detail').innerHTML = '';
+  $('export').value = '';
+  $('start').disabled = true;
+  $('stop').disabled = false;
+  renderSummary(slowMs);
+
+  for (let round = 1; round <= rounds && running; round++) {
+    const roundStart = new Date();
+    const t0 = performance.now();
+    const ticker = setInterval(() => {
+      $('status').textContent = `第 ${round}／${rounds} 輪進行中，已等待 ${((performance.now() - t0) / 1000).toFixed(0)} 秒…`;
+    }, 500);
+    $('status').textContent = `第 ${round}／${rounds} 輪進行中…`;
+
+    const outcomes = await Promise.all(targets.map((t) => probe(t, timeoutMs).then((o) => {
+      const r = { round, time: timeStr(roundStart), name: t.name, url: t.url, ...o };
+      results.push(r);
+      addDetailRow(r, slowMs);
+      renderSummary(slowMs);
+      return r;
+    })));
+    clearInterval(ticker);
+
+    const bad = outcomes.filter((o) => o.result !== 'ok').length;
+    $('status').textContent = `第 ${round}／${rounds} 輪完成${bad ? `，${bad} 個請求逾時或錯誤` : ''}`;
+    if (round < rounds && running) await sleep(intervalMs);
+  }
+
+  const stopped = !running;
+  running = false;
+  $('start').disabled = false;
+  $('stop').disabled = true;
+  $('status').textContent = stopped ? '已停止' : `測試完成，共 ${results.length} 個請求`;
+  $('export').value = buildExport(slowMs, timeoutMs);
+}
+
+$('start').addEventListener('click', run);
+$('stop').addEventListener('click', () => { running = false; $('status').textContent = '停止中，等待本輪請求結束…'; });
+
+$('copy').addEventListener('click', async () => {
+  const text = $('export').value || buildExport(Math.max(1, parseFloat($('slow').value) || 5) * 1000, Math.max(1, parseFloat($('timeout').value) || 20) * 1000);
+  $('export').value = text;
+  try {
+    await navigator.clipboard.writeText(text);
+    $('status').textContent = '已複製到剪貼簿';
+  } catch (e) {
+    $('export').focus();
+    $('export').select();
+    $('status').textContent = '無法自動複製（非 HTTPS 頁面），請在下方文字框長按全選後複製';
+  }
+});
+
+$('csv').addEventListener('click', () => {
+  const slowMs = Math.max(1, parseFloat($('slow').value) || 5) * 1000;
+  const blob = new Blob([buildCsv(slowMs)], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  const stamp = (startedAt || new Date()).toISOString().slice(0, 19).replace(/[-:T]/g, '');
+  a.href = URL.createObjectURL(blob);
+  a.download = `conn-test-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+});
+
+if (params.get('auto') === '1') run();
+</script>
+</body>
+</html>
