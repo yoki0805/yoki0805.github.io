@@ -52,6 +52,8 @@
   tr:nth-child(even) td { background: var(--row); }
   .ok { color: var(--ok); } .bad { color: var(--bad); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .frame-box iframe { display: block; width: 100%; max-width: 360px; height: 220px; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; background: #000; }
+  body:not(.mode-game) .game-only { display: none; }
 </style>
 </head>
 <body>
@@ -73,6 +75,20 @@
   <section>
     <h2>測試設定</h2>
     <div class="grid">
+      <div><label for="mode">測試模式</label>
+        <select id="mode">
+          <option value="fetch">多主機請求</option>
+          <option value="game">遊戲頁載入</option>
+        </select>
+      </div>
+      <div class="game-only"><label for="gametimeout">遊戲頁逾時（秒）</label><input id="gametimeout" type="number" min="10" value="180"></div>
+    </div>
+    <div class="game-only" style="margin-bottom:10px">
+      <label for="gameurl">遊戲頁網址</label>
+      <input id="gameurl" value="https://test-wbgame.jlfafafa3.com/fish3/index.html">
+    </div>
+    <p class="hint game-only">遊戲頁載入模式：把遊戲頁放進下方小框載入（不登入），量到頁面 load 事件（CSS 與啟動 JS 都載完）要多久；載入期間每 3 秒同時對下面的測試對象發請求，比對卡住當下其他請求是否正常。每次測試請關掉分頁、重開新的無痕分頁，第一次載入才是冷啟動。</p>
+    <div class="grid">
       <div><label for="rounds">輪數</label><input id="rounds" type="number" min="1" value="10"></div>
       <div><label for="interval">每輪間隔（秒）</label><input id="interval" type="number" min="0" value="3"></div>
       <div><label for="timeout">逾時（秒）</label><input id="timeout" type="number" min="1" value="20"></div>
@@ -86,6 +102,7 @@
       <button id="stop" disabled>停止</button>
     </div>
     <div class="status" id="status"></div>
+    <div id="frameBox" class="frame-box"></div>
   </section>
 
   <section>
@@ -136,9 +153,19 @@ let results = [];
 let startedAt = null;
 
 $('targets').value = DEFAULT_TARGETS;
-for (const key of ['rounds', 'interval', 'timeout', 'slow', 'tester', 'osver', 'browser', 'network']) {
+for (const key of ['mode', 'gameurl', 'gametimeout', 'rounds', 'interval', 'timeout', 'slow', 'tester', 'osver', 'browser', 'network']) {
   if (params.has(key)) $(key).value = params.get(key);
 }
+
+function syncMode() {
+  document.body.classList.toggle('mode-game', $('mode').value === 'game');
+}
+$('mode').addEventListener('change', () => {
+  syncMode();
+  if ($('mode').value === 'game' && !params.has('rounds')) $('rounds').value = 1;
+});
+syncMode();
+if ($('mode').value === 'game' && !params.has('rounds')) $('rounds').value = 1;
 
 function deviceInfo() {
   const ua = navigator.userAgent;
@@ -266,6 +293,11 @@ function buildExport(slowMs, timeoutMs) {
   lines.push(`- 瀏覽器／模式：${$('browser').value || '（未填）'}`);
   lines.push(`- 網路：${$('network').value || '（未填）'}`);
   lines.push(`- UA：${d.ua}`);
+  if ($('mode').value === 'game') {
+    lines.push(`- 模式：遊戲頁載入（${$('gameurl').value}，逾時 ${$('gametimeout').value} 秒）`);
+  } else {
+    lines.push('- 模式：多主機請求');
+  }
   lines.push(`- 設定：逾時 ${timeoutMs / 1000} 秒，慢 ≥ ${slowMs / 1000} 秒，每輪間隔 ${$('interval').value} 秒`);
   lines.push('');
   lines.push('| 名稱 | 請求數 | 逾時 | 錯誤 | 慢 | 中位數 | P90 | 最長 |');
@@ -292,6 +324,58 @@ function buildCsv(slowMs) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function recordResult(r, slowMs) {
+  results.push(r);
+  addDetailRow(r, slowMs);
+  renderSummary(slowMs);
+}
+
+// 把遊戲頁放進 iframe 載入，量到 load 事件的時間；載入期間每 3 秒對測試對象發請求做對照
+async function runGameRound(round, rounds, targets, timeoutMs, gameTimeoutMs, slowMs) {
+  const url = bust($('gameurl').value.trim());
+  const roundStart = new Date();
+  const t0 = performance.now();
+  let done = false;
+
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  $('frameBox').replaceChildren(frame);
+
+  let resolveLoad;
+  const pageLoad = new Promise((resolve) => { resolveLoad = resolve; });
+  const timer = setTimeout(() => resolveLoad('timeout'), gameTimeoutMs);
+  frame.addEventListener('load', () => resolveLoad('ok'), { once: true });
+  frame.src = url;
+
+  const ticker = setInterval(() => {
+    if (!running) { resolveLoad('stopped'); return; }
+    $('status').textContent = `第 ${round}／${rounds} 輪：遊戲頁載入中，已等待 ${((performance.now() - t0) / 1000).toFixed(0)} 秒…`;
+  }, 500);
+
+  const sideProbes = (async () => {
+    while (!done && running) {
+      const at = new Date();
+      await Promise.all(targets.map((t) => probe(t, timeoutMs).then((o) => {
+        recordResult({ round, time: timeStr(at), name: '（同時）' + t.name, url: t.url, ...o }, slowMs);
+      })));
+      for (let waited = 0; waited < 3000 && !done && running; waited += 250) await sleep(250);
+    }
+  })();
+
+  const outcome = await pageLoad;
+  done = true;
+  clearTimeout(timer);
+  clearInterval(ticker);
+  const ms = Math.round(performance.now() - t0);
+  frame.src = 'about:blank';
+  frame.remove();
+  if (outcome !== 'stopped') {
+    recordResult({ round, time: timeStr(roundStart), name: '遊戲頁', url: $('gameurl').value.trim(), result: outcome, ms }, slowMs);
+    $('status').textContent = `第 ${round}／${rounds} 輪：遊戲頁${outcome === 'ok' ? `載入完成，${(ms / 1000).toFixed(1)} 秒` : '逾時'}，等待同時進行的請求結束…`;
+  }
+  await sideProbes;
+}
+
 async function run() {
   const targets = parseTargets();
   if (!targets.length) { $('status').textContent = '請至少填一個測試對象'; return; }
@@ -309,7 +393,15 @@ async function run() {
   $('stop').disabled = false;
   renderSummary(slowMs);
 
+  const gameMode = $('mode').value === 'game';
+  const gameTimeoutMs = Math.max(10, parseFloat($('gametimeout').value) || 180) * 1000;
+
   for (let round = 1; round <= rounds && running; round++) {
+    if (gameMode) {
+      await runGameRound(round, rounds, targets, timeoutMs, gameTimeoutMs, slowMs);
+      if (round < rounds && running) await sleep(intervalMs);
+      continue;
+    }
     const roundStart = new Date();
     const t0 = performance.now();
     const ticker = setInterval(() => {
